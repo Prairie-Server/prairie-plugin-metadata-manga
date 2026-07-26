@@ -1,38 +1,87 @@
-name: CI
+        name: CI
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
+        on:
+          push:
+            branches: [main]
+          pull_request:
+          workflow_dispatch:
 
-permissions:
-  contents: read
+        permissions:
+          contents: read
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
+        concurrency:
+          group: ci-${{ github.workflow }}-${{ github.ref }}
+          cancel-in-progress: true
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-
-      - name: Configure module resolution
-        run: |
-          go env -w GOPROXY=direct
-          go env -w GOPRIVATE=github.com/prairie-server/*
-          go env -w GONOSUMDB=github.com/prairie-server/*
-
-      - name: Reject committed local SDK replaces
-        run: |
-          if grep -Eq '^replace github.com/prairie-server/prairie-plugin-sdk => /' go.mod; then
-            echo "go.mod contains a machine-local prairie-plugin-sdk replace."
-            exit 1
-          fi
-
-      - name: Run tests
         env:
-          GOWORK: off
-        run: go test ./...
+          COVER_MIN: "58"
+
+        jobs:
+          lint:
+            name: Go lint
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v6
+                with:
+                  persist-credentials: false
+                  fetch-depth: 0
+
+              - uses: actions/setup-go@v5
+                with:
+                  go-version-file: go.mod
+                  cache: true
+
+- name: Configure private module resolution
+  run: |
+    go env -w GOPROXY=direct
+    go env -w GOPRIVATE=github.com/prairie-server/*
+    go env -w GONOSUMDB=github.com/prairie-server/*
+
+              - name: golangci-lint
+                uses: golangci/golangci-lint-action@v8
+                with:
+                  version: latest
+                  only-new-issues: true
+                  args: --timeout=5m
+
+          test:
+            name: Go tests + coverage
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v6
+                with:
+                  persist-credentials: false
+
+              - uses: actions/setup-go@v5
+                with:
+                  go-version-file: go.mod
+                  cache: true
+
+- name: Configure private module resolution
+  run: |
+    go env -w GOPROXY=direct
+    go env -w GOPRIVATE=github.com/prairie-server/*
+    go env -w GONOSUMDB=github.com/prairie-server/*
+
+- name: Reject committed local SDK replaces
+  run: |
+    if grep -Eq '^replace github.com/prairie-server/prairie-plugin-sdk => /' go.mod; then
+      echo "go.mod contains a machine-local prairie-plugin-sdk replace."
+      exit 1
+    fi
+
+              - name: Run tests with coverage
+                env:
+                  GOWORK: off
+                run: go test ./... -count=1 -covermode=atomic -coverprofile=coverage.out; test -s coverage.out
+
+              - name: Enforce coverage floor
+                run: ./scripts/check-coverage.sh coverage.out
+
+              - name: Upload coverage profile
+                if: always()
+                uses: actions/upload-artifact@v5
+                with:
+                  name: coverage-out
+                  path: coverage.out
+                  if-no-files-found: ignore
