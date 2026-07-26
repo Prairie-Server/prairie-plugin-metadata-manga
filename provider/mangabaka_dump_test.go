@@ -28,8 +28,8 @@ func TestResolveDumpDirDefaultsUnderCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if filepath.Base(got) != "silo-manga-metadata" {
-		t.Fatalf("default dir = %q, want .../silo-manga-metadata", got)
+	if filepath.Base(got) != "prairie-manga-metadata" {
+		t.Fatalf("default dir = %q, want .../prairie-manga-metadata", got)
 	}
 }
 

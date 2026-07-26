@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Silo-Server/silo-plugin-manga-metadata/metadata"
+	"github.com/prairie-server/prairie-plugin-metadata-manga/metadata"
 )
 
 // stubBackend is an in-memory mangaBakaBackend for testing source behavior

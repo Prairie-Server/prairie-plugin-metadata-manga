@@ -22,13 +22,13 @@ jobs:
       - name: Configure module resolution
         run: |
           go env -w GOPROXY=direct
-          go env -w GOPRIVATE=github.com/Silo-Server/*
-          go env -w GONOSUMDB=github.com/Silo-Server/*
+          go env -w GOPRIVATE=github.com/prairie-server/*
+          go env -w GONOSUMDB=github.com/prairie-server/*
 
       - name: Reject committed local SDK replaces
         run: |
-          if grep -Eq '^replace github.com/Silo-Server/silo-plugin-sdk => /' go.mod; then
-            echo "go.mod contains a machine-local silo-plugin-sdk replace."
+          if grep -Eq '^replace github.com/prairie-server/prairie-plugin-sdk => /' go.mod; then
+            echo "go.mod contains a machine-local prairie-plugin-sdk replace."
             exit 1
           fi
 

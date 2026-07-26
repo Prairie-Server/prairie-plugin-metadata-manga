@@ -1,19 +1,19 @@
 {
-  "plugin_id": "silo.manga-metadata",
+  "plugin_id": "prairie.manga-metadata",
   "version": "0.1.1",
   "checksum": "__CHECKSUM__",
-  "silo_api_version": "v1",
+  "prairie_api_version": "v1",
   "presentation": {
     "display_name": "Manga Metadata",
     "summary": "Match manga and add rich metadata, covers, contributors, and publication details.",
     "description_markdown": "Uses MangaBaka as the primary source, with MangaDex as a deep fallback and optional AniList banner artwork. It can also keep a local MangaBaka database for fast, rate-limit-free matching on large libraries.",
     "setup_markdown": "Install the plugin and add **Manga Metadata** to a manga library's provider chain. The defaults use live sources. For large libraries, enable the local MangaBaka dump and ensure the configured storage path has about 1.5 GB available; the initial download is roughly 335 MB.",
-    "homepage_url": "https://github.com/Silo-Server/silo-plugin-metadata-manga",
-    "source_url": "https://github.com/Silo-Server/silo-plugin-metadata-manga",
-    "support_url": "https://github.com/Silo-Server/silo-plugin-metadata-manga/issues",
-    "changelog_url": "https://github.com/Silo-Server/silo-plugin-metadata-manga/releases",
-    "publisher_name": "Silo",
-    "publisher_url": "https://github.com/Silo-Server",
+    "homepage_url": "https://github.com/prairie-server/prairie-plugin-metadata-manga",
+    "source_url": "https://github.com/prairie-server/prairie-plugin-metadata-manga",
+    "support_url": "https://github.com/prairie-server/prairie-plugin-metadata-manga/issues",
+    "changelog_url": "https://github.com/prairie-server/prairie-plugin-metadata-manga/releases",
+    "publisher_name": "Prairie",
+    "publisher_url": "https://github.com/prairie-server",
     "license_spdx": "AGPL-3.0-only"
   },
   "supported_platforms": [

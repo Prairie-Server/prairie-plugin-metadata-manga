@@ -19,10 +19,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const dumpDirName = "silo-manga-metadata"
+const dumpDirName = "prairie-manga-metadata"
 
 // resolveDumpDir picks where the local dump lives. An explicit config path wins.
-// Otherwise it defaults to <user cache dir>/silo-manga-metadata, which survives
+// Otherwise it defaults to <user cache dir>/prairie-manga-metadata, which survives
 // plugin upgrades (the install dir is wiped on upgrade). If no cache dir
 // resolves (e.g. HOME unset in a container), it falls back to the OS temp dir.
 func resolveDumpDir(configPath string) (string, error) {

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Silo-Server/silo-plugin-manga-metadata/metadata"
+	"github.com/prairie-server/prairie-plugin-metadata-manga/metadata"
 )
 
 const mangaDexProviderID = "mangadex"

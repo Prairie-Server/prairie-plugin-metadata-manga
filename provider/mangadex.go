@@ -20,7 +20,7 @@ import (
 const (
 	mangaDexEndpoint  = "https://api.mangadex.org"
 	mangaDexCoverBase = "https://uploads.mangadex.org/covers"
-	mangaDexUserAgent = "silo-plugin-metadata-manga (https://github.com/Silo-Server/silo-plugin-metadata-manga)"
+	mangaDexUserAgent = "prairie-plugin-metadata-manga (https://github.com/prairie-server/prairie-plugin-metadata-manga)"
 )
 
 var mangaDexLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
