@@ -1,10 +1,10 @@
-module github.com/Silo-Server/silo-plugin-manga-metadata
+module github.com/prairie-server/prairie-plugin-metadata-manga
 
 go 1.26.0
 
 require (
-	github.com/Silo-Server/silo-plugin-sdk v0.10.0
 	github.com/klauspost/compress v1.18.6
+	github.com/prairie-server/prairie-plugin-sdk v0.12.1-0.20260726223239-3c6de05cade7
 	golang.org/x/time v0.15.0
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.52.0

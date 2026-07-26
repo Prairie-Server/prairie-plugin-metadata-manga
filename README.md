@@ -1,6 +1,6 @@
-# silo-plugin-metadata-manga
+# prairie-plugin-metadata-manga
 
-A [Silo](https://github.com/Silo-Server/silo-server) metadata provider plugin
+A [Prairie](https://github.com/prairie-server/prairie-server) metadata provider plugin
 for **manga** libraries. It enriches `type='manga'` series with cover art,
 synopsis, genres, author/artist credits, publication year, a hero banner, and
 publication status by matching against [MangaBaka](https://mangabaka.org) and,
