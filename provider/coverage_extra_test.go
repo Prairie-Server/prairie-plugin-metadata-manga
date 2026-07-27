@@ -14,8 +14,9 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/prairie-server/prairie-plugin-metadata-manga/metadata"
 	_ "modernc.org/sqlite"
+
+	"github.com/prairie-server/prairie-plugin-metadata-manga/metadata"
 )
 
 func TestDumpBackendFetchByIDAndPaths(t *testing.T) {
