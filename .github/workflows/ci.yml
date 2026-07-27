@@ -14,19 +14,19 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  COVER_MIN: "58"
+  COVER_MIN: "90"
 
 jobs:
   lint:
     name: Go lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -38,7 +38,7 @@ jobs:
           go env -w GONOSUMDB=github.com/prairie-server/*
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           only-new-issues: true
@@ -48,11 +48,11 @@ jobs:
     name: Go tests + coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload coverage profile
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-out
           path: coverage.out

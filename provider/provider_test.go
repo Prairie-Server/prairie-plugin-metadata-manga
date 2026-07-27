@@ -163,3 +163,57 @@ func TestSearchFallsBackToSecondSource(t *testing.T) {
 		t.Fatalf("match provider = %q, want the fallback source", matches[0].Provider)
 	}
 }
+
+func TestNewProviderAndFetchRouting(t *testing.T) {
+	p := NewProvider()
+	if p == nil || len(p.sources) == 0 {
+		t.Fatal("NewProvider")
+	}
+	_ = p.Close()
+
+	opts := Options{EnabledSources: []string{"mangadex"}, DefaultRegion: "us", DisableAniListBanners: true}
+	p2 := NewProviderWithOptions(opts)
+	if len(p2.sources) != 1 || p2.sources[0].ID() != "mangadex" {
+		t.Fatalf("filtered sources=%v", p2.sources)
+	}
+	_ = p2.Close()
+
+	// unknown enabled list falls back to all
+	p3 := NewProviderWithOptions(Options{EnabledSources: []string{"nope"}})
+	if len(p3.sources) < 2 {
+		t.Fatalf("fallback sources=%d", len(p3.sources))
+	}
+	_ = p3.Close()
+
+	match := metadata.Match{Provider: "anilist", ProviderID: "9", Title: "X"}
+	src := &fakeSource{id: "anilist", matches: []metadata.Match{match}}
+	p4 := NewProviderWithSources([]Source{nil, &fakeSource{id: ""}, src})
+	got, err := p4.Fetch(context.Background(), metadata.SearchQuery{
+		ProviderIDs: map[string]string{"anilist": "9"},
+	})
+	if err != nil || got == nil || got.ProviderID != "9" {
+		t.Fatalf("Fetch by source id %#v err=%v", got, err)
+	}
+	got2, err := p4.Fetch(context.Background(), metadata.SearchQuery{
+		ProviderIDs: map[string]string{metadata.CapabilityID: "anilist:9"},
+	})
+	if err != nil || got2 == nil {
+		t.Fatalf("Fetch by capability %#v err=%v", got2, err)
+	}
+	nilMatch, err := p4.Fetch(context.Background(), metadata.SearchQuery{})
+	if err != nil || nilMatch != nil {
+		t.Fatalf("empty fetch %v %v", nilMatch, err)
+	}
+
+	set := enabledSourceSet([]string{" MangaDex , mangabaka", "anilist"})
+	if !set["mangadex"] || !set["mangabaka"] || !set["anilist"] {
+		t.Fatalf("%v", set)
+	}
+}
+
+func TestNewProviderWithSourcesSkipsNil(t *testing.T) {
+	p := NewProviderWithSources(nil)
+	if len(p.sources) != 0 {
+		t.Fatal(p.sources)
+	}
+}

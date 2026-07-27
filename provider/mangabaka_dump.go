@@ -35,7 +35,9 @@ func resolveDumpDir(configPath string) (string, error) {
 	return filepath.Join(os.TempDir(), dumpDirName), nil
 }
 
-const dumpDownloadURL = "https://api.mangabaka.org/v1/database/series.jsonl.zst"
+// dumpDownloadURL is the MangaBaka series dump. Tests override it with an
+// httptest server serving a tiny .zst fixture.
+var dumpDownloadURL = "https://api.mangabaka.org/v1/database/series.jsonl.zst"
 
 // downloadAndDecompress streams a .zst file from url, decompresses it, and
 // installs it at dest atomically: it writes to dest+".tmp", fsyncs, then
