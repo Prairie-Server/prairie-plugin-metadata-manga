@@ -22,3 +22,32 @@ func TestProviderIDsFromMatchMergesExternalIDs(t *testing.T) {
 		t.Fatalf("external ids not merged: %v", ids)
 	}
 }
+
+func TestParseCapabilityProviderID(t *testing.T) {
+	src, id := ParseCapabilityProviderID(" mangabaka : 1677 ")
+	if src != "mangabaka" || id != "1677" {
+		t.Fatalf("%q %q", src, id)
+	}
+	if s, i := ParseCapabilityProviderID("nocolon"); s != "" || i != "" {
+		t.Fatal(s, i)
+	}
+	if s, i := ParseCapabilityProviderID(":onlyid"); s != "" || i != "" {
+		t.Fatal(s, i)
+	}
+	if s, i := ParseCapabilityProviderID("only:"); s != "" || i != "" {
+		t.Fatal(s, i)
+	}
+}
+
+func TestProviderIDsFromMatchSkipsEmpty(t *testing.T) {
+	ids := ProviderIDsFromMatch(Match{
+		Provider: "mangadex", ProviderID: "x",
+		ExternalIDs: map[string]string{"": "1", "anilist": "", "mangadex": "dup"},
+	})
+	if ids["anilist"] != "" && ids[""] != "" {
+		t.Fatal(ids)
+	}
+	if ids["mangadex"] != "x" {
+		t.Fatal(ids)
+	}
+}
