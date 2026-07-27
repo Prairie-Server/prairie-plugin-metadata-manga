@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,10 +16,22 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"golang.org/x/time/rate"
 	_ "modernc.org/sqlite"
 
 	"github.com/prairie-server/prairie-plugin-metadata-manga/metadata"
 )
+
+type edgeRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn edgeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+type edgeErrReadCloser struct{}
+
+func (edgeErrReadCloser) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+func (edgeErrReadCloser) Close() error             { return nil }
 
 func TestDumpBackendFetchByIDAndPaths(t *testing.T) {
 	dir := t.TempDir()
@@ -578,5 +592,297 @@ func TestTinyCoverageGaps(t *testing.T) {
 	})
 	if _, err := src2.Search(context.Background(), metadata.SearchQuery{Title: "Exact Title Nine"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDumpDownloadAndBuildErrorEdges(t *testing.T) {
+	parentFile := filepath.Join(t.TempDir(), "not-dir")
+	if err := os.WriteFile(parentFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := downloadAndDecompress(context.Background(), "http://127.0.0.1", filepath.Join(parentFile, "out.jsonl")); err == nil {
+		t.Fatal("expected mkdir error")
+	}
+	if err := downloadAndDecompress(context.Background(), "http://[::1", filepath.Join(t.TempDir(), "out.jsonl")); err == nil {
+		t.Fatal("expected request creation error")
+	}
+	badZstd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not-zstd"))
+	}))
+	defer badZstd.Close()
+	dest := filepath.Join(t.TempDir(), "out.jsonl")
+	if err := downloadAndDecompress(context.Background(), badZstd.URL, dest); err == nil {
+		t.Fatal("expected zstd decode error")
+	}
+	if _, err := os.Stat(dest + ".tmp"); !os.IsNotExist(err) {
+		t.Fatalf("temp file should be cleaned up, stat err=%v", err)
+	}
+
+	if _, err := buildDumpIndex(context.Background(), filepath.Join(t.TempDir(), "missing.jsonl"), filepath.Join(t.TempDir(), "idx.sqlite")); err == nil {
+		t.Fatal("expected build ingest error")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	jsonlPath := filepath.Join(t.TempDir(), "series.jsonl")
+	if err := os.WriteFile(jsonlPath, []byte(`{"id":1,"title":"X","type":"manga"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildDumpIndex(ctx, jsonlPath, filepath.Join(t.TempDir(), "idx.sqlite")); err == nil {
+		t.Fatal("expected canceled build error")
+	}
+}
+
+func TestIngestJSONLErrorBranches(t *testing.T) {
+	if err := ingestJSONL(context.Background(), nil, filepath.Join(t.TempDir(), "missing.jsonl")); err == nil {
+		t.Fatal("expected open error")
+	}
+
+	dir := t.TempDir()
+	validJSONL := filepath.Join(dir, "valid.jsonl")
+	if err := os.WriteFile(validJSONL, []byte(`{"id":1,"title":"Title","type":"manga"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", filepath.Join(dir, "empty.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ingestJSONL(context.Background(), db, validJSONL); err == nil {
+		t.Fatal("expected missing series table prepare error")
+	}
+	_ = db.Close()
+
+	db, err = sql.Open("sqlite", filepath.Join(dir, "series-only.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE series (id INTEGER PRIMARY KEY, json TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingestJSONL(context.Background(), db, validJSONL); err == nil {
+		t.Fatal("expected missing titles table prepare error")
+	}
+	_ = db.Close()
+
+	db, err = sql.Open("sqlite", filepath.Join(dir, "bad-series.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE series (id INTEGER PRIMARY KEY CHECK(id < 0), json TEXT NOT NULL);
+CREATE TABLE titles (norm TEXT NOT NULL, rev TEXT NOT NULL, series_id INTEGER NOT NULL);`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingestJSONL(context.Background(), db, validJSONL); err == nil {
+		t.Fatal("expected series insert error")
+	}
+	_ = db.Close()
+
+	db, err = sql.Open("sqlite", filepath.Join(dir, "bad-title.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE series (id INTEGER PRIMARY KEY, json TEXT NOT NULL);
+CREATE TABLE titles (norm TEXT NOT NULL, rev TEXT NOT NULL, series_id INTEGER NOT NULL);
+CREATE TRIGGER titles_fail BEFORE INSERT ON titles BEGIN SELECT RAISE(FAIL, 'title insert failed'); END;`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingestJSONL(context.Background(), db, validJSONL); err == nil {
+		t.Fatal("expected title insert error")
+	}
+	_ = db.Close()
+
+	longLinePath := filepath.Join(dir, "long.jsonl")
+	if err := os.WriteFile(longLinePath, bytes.Repeat([]byte("x"), 9<<20), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, err = sql.Open("sqlite", filepath.Join(dir, "long.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(dumpIndexSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingestJSONL(context.Background(), db, longLinePath); err == nil {
+		t.Fatal("expected scanner error")
+	}
+	_ = db.Close()
+}
+
+func TestDumpIndexAndRefreshEdgeBranches(t *testing.T) {
+	dir := t.TempDir()
+	jsonlPath := filepath.Join(dir, "series.jsonl")
+	dbPath := filepath.Join(dir, "index.sqlite")
+	jsonl := `{"id":1,"title":"Shield Hero","type":"manga","secondary_titles":{"en":[{"type":"alt","title":"The Rising of the Shield Hero"}]}}` + "\n"
+	if err := os.WriteFile(jsonlPath, []byte(jsonl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := buildDumpIndex(context.Background(), jsonlPath, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer idx.close()
+	got, err := idx.lookup(context.Background(), "Shield Hero")
+	if err != nil || len(got) != 1 || got[0].ID != 1 {
+		t.Fatalf("dedup lookup = %#v err=%v", got, err)
+	}
+
+	rw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rw.Exec(`DELETE FROM _meta`); err != nil {
+		t.Fatal(err)
+	}
+	_ = rw.Close()
+	if _, ok := idx.builtAt(); ok {
+		t.Fatal("missing built_at should not parse")
+	}
+
+	closed, err := openDumpIndex(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = closed.close()
+	if _, err := closed.lookup(context.Background(), "Shield Hero"); err == nil {
+		t.Fatal("expected lookup query error on closed db")
+	}
+	if _, err := closed.fetchByID(context.Background(), "1"); err == nil {
+		t.Fatal("expected fetch query error on closed db")
+	}
+
+	prev := dumpDownloadURL
+	badDump := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("bad-zstd"))
+	}))
+	defer badDump.Close()
+	dumpDownloadURL = badDump.URL
+	t.Cleanup(func() { dumpDownloadURL = prev })
+	stale := newDumpBackend(t.TempDir(), 1)
+	stale.refreshIfNeeded(context.Background())
+	if stale.ready() {
+		t.Fatal("bad download should not ready backend")
+	}
+}
+
+func TestMatcherAndNetworkEdgeBranches(t *testing.T) {
+	if got := pickConfidentMatch("", matchConfig[string]{
+		candidates: []string{"Anything"},
+		titlesOf:   func(s *string) []string { return []string{*s} },
+	}); got != nil {
+		t.Fatalf("empty query = %v", *got)
+	}
+	partBlind := pickConfidentMatch("JoJo", matchConfig[string]{
+		candidates: []string{"JoJo Part 2"},
+		titlesOf:   func(s *string) []string { return []string{*s} },
+	})
+	if partBlind == nil || *partBlind != "JoJo Part 2" {
+		t.Fatalf("part-blind match = %v", partBlind)
+	}
+	mismatch := pickConfidentMatch("JoJo Part 1", matchConfig[string]{
+		candidates: []string{"JoJo Part 2"},
+		titlesOf:   func(s *string) []string { return []string{*s} },
+	})
+	if mismatch != nil {
+		t.Fatalf("mismatched explicit part should not match: %v", *mismatch)
+	}
+	cands := []int{5, 30, 20}
+	if got := dominantCandidate([]*int{&cands[0], &cands[1], &cands[2]}, func(v *int) int { return *v }); got != nil {
+		t.Fatalf("non-dominant score = %v", *got)
+	}
+	if normalizeTitle("Chapter 0012") != "chapter12" {
+		t.Fatalf("normalize leading zero run = %q", normalizeTitle("Chapter 0012"))
+	}
+	if firstNonEmpty("", " ") != "" {
+		t.Fatal("all-empty firstNonEmpty")
+	}
+
+	oldMangaDexLimiter := mangaDexLimiter
+	oldSearchLimiter := mangaBakaSearchLimiter
+	oldLookupLimiter := mangaBakaLookupLimiter
+	oldAniListLimiter := aniListLimiter
+	t.Cleanup(func() {
+		mangaDexLimiter = oldMangaDexLimiter
+		mangaBakaSearchLimiter = oldSearchLimiter
+		mangaBakaLookupLimiter = oldLookupLimiter
+		aniListLimiter = oldAniListLimiter
+	})
+	mangaDexLimiter = rate.NewLimiter(rate.Inf, 1)
+	mangaBakaSearchLimiter = rate.NewLimiter(rate.Inf, 1)
+	mangaBakaLookupLimiter = rate.NewLimiter(rate.Inf, 1)
+	aniListLimiter = rate.NewLimiter(rate.Inf, 1)
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	mangaDexLimiter = rate.NewLimiter(rate.Every(time.Hour), 0)
+	if _, err := doMangaDexGet(canceled, http.DefaultClient, "https://example.test"); err == nil {
+		t.Fatal("expected mangadex wait error")
+	}
+	mangaDexLimiter = rate.NewLimiter(rate.Inf, 1)
+	if _, err := doMangaDexGet(context.Background(), http.DefaultClient, "http://[::1"); err == nil {
+		t.Fatal("expected mangadex request creation error")
+	}
+	reqErrClient := &http.Client{Transport: edgeRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("boom")
+	})}
+	if _, err := doMangaDexGet(context.Background(), reqErrClient, "https://example.test"); err == nil {
+		t.Fatal("expected mangadex request error")
+	}
+	decodeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("{"))
+	}))
+	defer decodeSrv.Close()
+	if _, err := searchMangaDex(context.Background(), decodeSrv.Client(), decodeSrv.URL, "x"); err == nil {
+		t.Fatal("expected mangadex search decode error")
+	}
+	if _, err := fetchMangaDexByID(context.Background(), decodeSrv.Client(), decodeSrv.URL, "x"); err == nil {
+		t.Fatal("expected mangadex fetch decode error")
+	}
+	if _, err := fetchMangaDexByID(context.Background(), reqErrClient, "https://example.test", "x"); err == nil {
+		t.Fatal("expected mangadex fetch transport error")
+	}
+
+	live := newLiveBackendWithEndpoint("http://[::1")
+	if _, err := live.getJSONOnce(context.Background(), "http://[::1", &struct{}{}); err == nil {
+		t.Fatal("expected live request creation error")
+	}
+	live.client = reqErrClient
+	if _, err := live.getJSONOnce(context.Background(), "https://example.test", &struct{}{}); err == nil {
+		t.Fatal("expected live request error")
+	}
+	readErrClient := &http.Client{Transport: edgeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: edgeErrReadCloser{}, Header: make(http.Header), Request: req}, nil
+	})}
+	live.client = readErrClient
+	if _, err := live.getJSONOnce(context.Background(), "https://example.test", &struct{}{}); err == nil {
+		t.Fatal("expected live read error")
+	}
+	mangaBakaSearchLimiter = rate.NewLimiter(rate.Every(time.Hour), 0)
+	if _, err := newLiveBackendWithEndpoint("https://example.test").search(canceled, "x"); err == nil {
+		t.Fatal("expected live search wait error")
+	}
+	mangaBakaLookupLimiter = rate.NewLimiter(rate.Every(time.Hour), 0)
+	if _, err := newLiveBackendWithEndpoint("https://example.test").fetch(canceled, "1"); err == nil {
+		t.Fatal("expected live fetch wait error")
+	}
+
+	aniListLimiter = rate.NewLimiter(rate.Every(time.Hour), 0)
+	if _, err := doAniListQuery(canceled, http.DefaultClient, "https://example.test", "query", nil); err == nil {
+		t.Fatal("expected anilist wait error")
+	}
+	aniListLimiter = rate.NewLimiter(rate.Inf, 1)
+	if _, err := doAniListQuery(context.Background(), http.DefaultClient, "http://[::1", "query", nil); err == nil {
+		t.Fatal("expected anilist request creation error")
+	}
+	if _, err := doAniListQuery(context.Background(), reqErrClient, "https://example.test", "query", nil); err == nil {
+		t.Fatal("expected anilist request error")
+	}
+	bannerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"Media":{"id":1,"bannerImage":123}}}`))
+	}))
+	defer bannerSrv.Close()
+	enricher := newAniListBannerEnricherWithEndpoint(bannerSrv.URL)
+	enricher.client = bannerSrv.Client()
+	if _, err := enricher.banner(context.Background(), 1); err == nil {
+		t.Fatal("expected banner parse error")
 	}
 }

@@ -117,6 +117,19 @@ func TestLoadManifestAndGetManifest(t *testing.T) {
 	}
 }
 
+func TestLoadManifestEmbeddedVersion(t *testing.T) {
+	original := version
+	version = ""
+	t.Cleanup(func() { version = original })
+	manifest, err := loadManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.GetVersion() == "" || len(manifest.GetChecksum()) != 64 {
+		t.Fatalf("version/checksum = %q/%q", manifest.GetVersion(), manifest.GetChecksum())
+	}
+}
+
 func TestConfigureAndStateForRequest(t *testing.T) {
 	rs := &runtimeServer{}
 	state := rs.stateForRequest()
@@ -137,6 +150,15 @@ func TestConfigureAndStateForRequest(t *testing.T) {
 	state = rs.stateForRequest()
 	if state.provider == nil || state.options.DefaultRegion != "us" {
 		t.Fatalf("state=%#v", state)
+	}
+	if _, err := rs.Configure(context.Background(), &pluginv1.ConfigureRequest{
+		Config: []*pluginv1.ConfigEntry{configEntry("default_region", "eu")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	state = rs.stateForRequest()
+	if state.options.DefaultRegion != "eu" {
+		t.Fatalf("reconfigured state=%#v", state)
 	}
 	_ = state.provider.Close()
 }
@@ -201,6 +223,9 @@ func TestMainHelpers(t *testing.T) {
 	if firstText("", " a ", "b") != "a" {
 		t.Fatal("firstText")
 	}
+	if firstText("", " ") != "" {
+		t.Fatal("empty firstText")
+	}
 	if stringMapFromStruct(nil) == nil {
 		t.Fatal("nil map")
 	}
@@ -240,6 +265,10 @@ func TestMainHelpers(t *testing.T) {
 	if configEntryString(nil) != "" {
 		t.Fatal("nil string")
 	}
+	nilValueStruct := &structpb.Struct{Fields: map[string]*structpb.Value{"value": nil}}
+	if configEntryString(nilValueStruct) != "" {
+		t.Fatal("nil value string")
+	}
 	if configEntryString(mustStruct(t, map[string]any{"text": "via-text"})) != "via-text" {
 		t.Fatal("text key")
 	}
@@ -248,6 +277,9 @@ func TestMainHelpers(t *testing.T) {
 	}
 	if configEntryBoolDefault(nil, true) != true {
 		t.Fatal("nil bool")
+	}
+	if !configEntryBoolDefault(nilValueStruct, true) {
+		t.Fatal("nil value bool")
 	}
 	if !configEntryBoolDefault(mustStruct(t, map[string]any{"value": float64(1)}), false) {
 		t.Fatal("number bool")
@@ -263,6 +295,9 @@ func TestMainHelpers(t *testing.T) {
 	}
 	if n, ok := configEntryNumber(nil); ok || n != 0 {
 		t.Fatal("nil number")
+	}
+	if n, ok := configEntryNumber(nilValueStruct); ok || n != 0 {
+		t.Fatal("nil value number")
 	}
 	if n, ok := configEntryNumber(mustStruct(t, map[string]any{"value": "12"})); !ok || n != 12 {
 		t.Fatal("string number")
