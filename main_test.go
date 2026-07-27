@@ -5,10 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/prairie-server/prairie-plugin-metadata-manga/metadata"
-	"github.com/prairie-server/prairie-plugin-metadata-manga/provider"
 	pluginv1 "github.com/prairie-server/prairie-plugin-sdk/pkg/pluginproto/prairie/plugin/v1"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/prairie-server/prairie-plugin-metadata-manga/metadata"
+	"github.com/prairie-server/prairie-plugin-metadata-manga/provider"
 )
 
 func configEntry(key, value string) *pluginv1.ConfigEntry {
