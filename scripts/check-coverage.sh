@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fail if total statement coverage is below COVER_MIN (percent).
 set -euo pipefail
-COVER_MIN="${COVER_MIN:-90}"
+COVER_MIN="${COVER_MIN:-95}"
 PROFILE="${1:-coverage.out}"
 if [[ ! -f "$PROFILE" ]]; then
   echo "coverage profile missing: $PROFILE" >&2
