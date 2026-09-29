@@ -80,7 +80,7 @@ func doAniListQuery(ctx context.Context, client *http.Client, endpoint, query st
 		if doErr != nil {
 			return nil, 0, fmt.Errorf("anilist: request: %w", doErr)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		raw, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 		if resp.StatusCode == http.StatusTooManyRequests {
