@@ -30,7 +30,7 @@ GOWORK=off go test ./...
 GOWORK=off go vet ./...
 GOWORK=off go build ./...
 gofmt -l .
-golangci-lint run ./...
+GOWORK=off golangci-lint run ./...
 GOWORK=off go test ./... -count=1 -covermode=atomic -coverprofile=coverage.out
 ./scripts/check-coverage.sh coverage.out
 ```
@@ -43,6 +43,9 @@ isolation when those behaviors change.
 CI runs golangci-lint v2.14.0 and enforces a 95% statement coverage floor
 (`scripts/check-coverage.sh`); the lint and coverage commands above reproduce
 those checks locally.
+Locally, `golangci-lint run` checks the whole repository, while CI reports only
+issues new in the pull request (`only-new-issues`), so the local run is the
+stricter of the two.
 
 The normal suite is hermetic. `TestLiveMangaBakaIntegration` is skipped unless
 `MANGABAKA_LIVE=1`; run it separately for live API or banner-enrichment changes
