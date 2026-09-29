@@ -19,7 +19,8 @@ metadata orchestration belongs in
 
 Use the Go version declared in `go.mod`. A local `go.work` may point at a sibling
 SDK checkout while developing both repositories, but committed code and CI must
-resolve the tagged SDK dependency with `GOWORK=off`. Never commit local dump
+resolve the SDK version pinned in `go.mod` (a release tag or a pseudo-version
+of the SDK's `main` branch) with `GOWORK=off`. Never commit local dump
 data, cache paths, or a local filesystem `replace` directive.
 
 ## Validate your change
@@ -29,6 +30,9 @@ GOWORK=off go test ./...
 GOWORK=off go vet ./...
 GOWORK=off go build ./...
 gofmt -l .
+GOWORK=off golangci-lint run ./...
+GOWORK=off go test ./... -count=1 -covermode=atomic -coverprofile=coverage.out
+./scripts/check-coverage.sh coverage.out
 ```
 
 `gofmt -l .` should print nothing. If it reports unrelated pre-existing drift,
@@ -36,6 +40,12 @@ none of the Go files touched by your change may appear in the output; do not add
 to the output, and report what remains. Add focused coverage for title
 normalization, ambiguity handling, source fallback, dump refreshes, and failure
 isolation when those behaviors change.
+CI runs golangci-lint v2.14.0 and enforces a 95% statement coverage floor
+(`scripts/check-coverage.sh`); the lint and coverage commands above reproduce
+those checks locally.
+Locally, `golangci-lint run` checks the whole repository, while CI reports only
+issues new in the pull request (`only-new-issues`), so the local run is the
+stricter of the two.
 
 The normal suite is hermetic. `TestLiveMangaBakaIntegration` is skipped unless
 `MANGABAKA_LIVE=1`; run it separately for live API or banner-enrichment changes

@@ -56,7 +56,7 @@ func downloadAndDecompress(ctx context.Context, url, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("mangabaka dump: status %d", res.StatusCode)
 	}
@@ -176,7 +176,7 @@ func ingestJSONL(ctx context.Context, db *sql.DB, jsonlPath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -309,7 +309,7 @@ func (i *dumpIndex) lookup(ctx context.Context, title string) ([]mangaBakaSeries
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []mangaBakaSeries
 	seen := make(map[int]bool)

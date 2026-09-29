@@ -145,7 +145,7 @@ func doMangaDexGet(ctx context.Context, client *http.Client, requestURL string) 
 		if doErr != nil {
 			return nil, 0, fmt.Errorf("mangadex: request: %w", doErr)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		raw, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 		if resp.StatusCode == http.StatusTooManyRequests {

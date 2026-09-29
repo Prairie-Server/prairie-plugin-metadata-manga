@@ -108,7 +108,7 @@ func (b *liveBackend) getJSONOnce(ctx context.Context, endpoint string, out any)
 	if err != nil {
 		return -1, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode == http.StatusTooManyRequests {
 		return parseRetryAfter(res.Header.Get("Retry-After")), fmt.Errorf("mangabaka: rate limited (429)")
 	}
